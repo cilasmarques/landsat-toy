@@ -13,8 +13,8 @@ using namespace std;
 using namespace std::chrono;
 
 // Matrix environment
-int NORMAL_HEIGHT_BAND = 6502;  // int SMALL_HEIGHT_BAND = 35;
-int NORMAL_WIDTH_BAND = 7295;   // int SMALL_WIDTH_BAND = 35;
+int NORMAL_HEIGHT_BAND = 35;  // int SMALL_HEIGHT_BAND = 35;
+int NORMAL_WIDTH_BAND = 35;   // int SMALL_WIDTH_BAND = 35;
 
 int height_band = NORMAL_HEIGHT_BAND;
 int width_band = NORMAL_WIDTH_BAND;
@@ -55,34 +55,24 @@ string compute_initial_products()
   // Need to compute the initial products ( HERE WE ARE USING PRE COMPUTED VALUES )
   ifstream inFile;
 
-  inFile.open("./input/raw/NDVI.dat", std::ios::binary);
-  inFile.read(reinterpret_cast<char *>(&image_size), sizeof(image_size));
-  inFile.read(reinterpret_cast<char *>(ndvi_pointer), sizeof(double) * image_size);
+  inFile.open("./input/small/NDVI.dat", std::ios::binary);
+  inFile.read(reinterpret_cast<char*>(ndvi_pointer), image_size * sizeof(double));
   inFile.close();
 
-  inFile.open("./input/raw/ALBEDO.dat", std::ios::binary);
-  inFile.read(reinterpret_cast<char *>(&image_size), sizeof(image_size));
+  inFile.open("./input/small/ALBEDO.dat", std::ios::binary);
   inFile.read(reinterpret_cast<char *>(albedo_pointer), sizeof(double) * image_size);
   inFile.close();
 
-  inFile.open("./input/raw/NET_RADIATION.dat", std::ios::binary);
-  inFile.read(reinterpret_cast<char *>(&image_size), sizeof(image_size));
+  inFile.open("./input/small/NET_RADIATION.dat", std::ios::binary);
   inFile.read(reinterpret_cast<char *>(net_radiation_pointer), sizeof(double) * image_size);
   inFile.close();
 
-  inFile.open("./input/raw/SOIL_HEAT_FLUX.dat", std::ios::binary);
-  inFile.read(reinterpret_cast<char *>(&image_size), sizeof(image_size));
+  inFile.open("./input/small/SOIL_HEAT_FLUX.dat", std::ios::binary);
   inFile.read(reinterpret_cast<char *>(soil_heat_pointer), sizeof(double) * image_size);
   inFile.close();
 
-  inFile.open("./input/raw/TS.dat", std::ios::binary);
-  inFile.read(reinterpret_cast<char *>(&image_size), sizeof(image_size));
-  inFile.read(reinterpret_cast<char *>(surface_pointer), sizeof(int) * image_size);
-  inFile.close();
-
-  inFile.open("./input/raw/SENSIBLE_HEAT_FLUX.dat", std::ios::binary);
-  inFile.read(reinterpret_cast<char *>(&image_size), sizeof(image_size));
-  inFile.read(reinterpret_cast<char *>(sensible_heat_pointer), sizeof(int) * image_size);
+  inFile.open("./input/small/TS.dat", std::ios::binary);
+  inFile.read(reinterpret_cast<char *>(surface_pointer), sizeof(double) * image_size);
   inFile.close();
 
   // Need to add the values to the vectors
@@ -110,7 +100,7 @@ string compute_initial_products()
     soil_heat_vector.push_back(soil_heat_row);
   }
 
-  return "P2 - INITIAL PRODUCTS, 0, 0, 0";
+  return "P2 - INITIAL PRODUCTS, 0, 0, 0\n";
 };
 
 string select_endmembers(int method)
@@ -158,32 +148,32 @@ string compute_initial_rah()
   // Need to compute the initial aerodynamic resistance ( HERE WE ARE USING PRE COMPUTED VALUES )
   ifstream inFile;
 
-  inFile.open("./input/raw/ZOM.dat", std::ios::binary);
+  inFile.open("./input/small/ZOM.dat", std::ios::binary);
   inFile.read(reinterpret_cast<char *>(&image_size), sizeof(image_size));
   inFile.read(reinterpret_cast<char *>(zom_pointer), sizeof(int) * image_size);
   inFile.close();
 
-  inFile.open("./input/raw/D0.dat", std::ios::binary);
+  inFile.open("./input/small/D0.dat", std::ios::binary);
   inFile.read(reinterpret_cast<char *>(&image_size), sizeof(image_size));
   inFile.read(reinterpret_cast<char *>(d0_pointer), sizeof(int) * image_size);
   inFile.close();
 
-  inFile.open("./input/raw/KB1.dat", std::ios::binary);
+  inFile.open("./input/small/KB1.dat", std::ios::binary);
   inFile.read(reinterpret_cast<char *>(&image_size), sizeof(image_size));
   inFile.read(reinterpret_cast<char *>(kb1_pointer), sizeof(int) * image_size);
   inFile.close();
 
-  inFile.open("./input/raw/USTAR.dat", std::ios::binary);
+  inFile.open("./input/small/USTAR.dat", std::ios::binary);
   inFile.read(reinterpret_cast<char *>(&image_size), sizeof(image_size));
   inFile.read(reinterpret_cast<char *>(ustar_pointer), sizeof(int) * image_size);
   inFile.close();
 
-  inFile.open("./input/raw/AERODYNAMIC_RESISTANCE.dat", std::ios::binary);
+  inFile.open("./input/small/AERODYNAMIC_RESISTANCE.dat", std::ios::binary);
   inFile.read(reinterpret_cast<char *>(&image_size), sizeof(image_size));
   inFile.read(reinterpret_cast<char *>(aerodynamic_pointer), sizeof(int) * image_size);
   inFile.close();
 
-  return "P2 - INITIAL RAH, 0, 0, 0";
+  return "P2 - INITIAL RAH, 0, 0, 0\n";
 }
 
 string rah_correction_function_blocks(double ndvi_min, double ndvi_max, Candidate hot_pixel, Candidate cold_pixel, int threads_per_block)
