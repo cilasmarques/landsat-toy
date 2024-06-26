@@ -41,6 +41,9 @@
 
 using namespace std::chrono;
 
+#define MATRIX_HEIGTH 4
+#define MATRIX_WIDTH 4
+
 #define HANDLE_ERROR(x)                                   \
   {                                                       \
     const auto err = x;                                   \
@@ -94,199 +97,107 @@ private:
   cudaEvent_t start_, stop_;
 };
 
+/**********************
+ * Computing: C_{m,n} = alpha * A_{m,n} B_{m,n} + beta * C_{m,n}
+ **********************/
 int main()
 {
   system_clock::time_point begin, end;
   int64_t general_time;
 
-  typedef float floatTypeA;
-  typedef float floatTypeB;
-  typedef float floatTypeC;
+  // Define os eixos
+  int tamanhoEixoA = 2;
+  int tamanhoEixoB = 2;
+  int tamanhoEixoC = 2;
+  std::vector<int> indicesEixoA{'m', 'n'};
+  // std::vector<int> indicesEixoB{'m', 'n'}; // Produto Escalar
+  std::vector<int> indicesEixoB{'n', 'j'}; // Produto de hadamard
+  std::vector<int> indicesEixoC{'m', 'n'};
+  std::vector<int64_t> dimensoesEixoA = {MATRIX_HEIGTH, MATRIX_WIDTH};
+  std::vector<int64_t> dimensoesEixoB = {MATRIX_HEIGTH, MATRIX_WIDTH};
+  std::vector<int64_t> dimensoesEixoC = {MATRIX_HEIGTH, MATRIX_WIDTH};
 
-  /**********************
-   * Computing: C_{m,n} = alpha * A_{m,n} B_{m,n} + beta * C_{m,n}
-   **********************/
-
-  // Define o tamanho de cada dimensão
-  std::vector<int64_t> extentA = {10000, 10000};
-  std::vector<int64_t> extentB = {10000, 10000};
-  std::vector<int64_t> extentC = {10000, 10000};
-
-  // Define a quantidade de dimensões dos tensores
-  int nmodeA = 2;
-  int nmodeB = 2;
-  int nmodeC = 2;
-
-  /**********************
-   * Allocating data
-   **********************/
-  size_t elementsA = extentA[0] * extentA[1];
-  size_t elementsB = extentB[0] * extentB[1];
-  size_t elementsC = extentC[0] * extentC[1];
-
-  size_t sizeA = sizeof(floatTypeA) * elementsA;
-  size_t sizeB = sizeof(floatTypeB) * elementsB;
-  size_t sizeC = sizeof(floatTypeC) * elementsC;
-  printf("Total memory: %.2f GiB\n", (sizeA + sizeB + sizeC) / 1024. / 1024. / 1024);
-
+  // Aloca memória
   void *A_d, *B_d, *C_d;
-  HANDLE_CUDA_ERROR(cudaMalloc((void **)&A_d, sizeA));
-  HANDLE_CUDA_ERROR(cudaMalloc((void **)&B_d, sizeB));
-  HANDLE_CUDA_ERROR(cudaMalloc((void **)&C_d, sizeC));
+  HANDLE_CUDA_ERROR(cudaMalloc((void **)&A_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH));
+  HANDLE_CUDA_ERROR(cudaMalloc((void **)&B_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH));
+  HANDLE_CUDA_ERROR(cudaMalloc((void **)&C_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH));
 
-  floatTypeA *A = (floatTypeA *)malloc(sizeof(floatTypeA) * elementsA);
-  floatTypeB *B = (floatTypeB *)malloc(sizeof(floatTypeB) * elementsB);
-  floatTypeC *C = (floatTypeC *)malloc(sizeof(floatTypeC) * elementsC);
+  float *A = (float *)malloc(sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH);
+  float *B = (float *)malloc(sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH);
+  float *C = (float *)malloc(sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH);
 
-  if (A == NULL || B == NULL || C == NULL)
-  {
-    printf("Error: Host allocation of A or C.\n");
-    return -1;
-  }
-
-  /*******************
-   * Initialize data
-   *******************/
-
-  for (int64_t i = 0; i < elementsA; i++)
-    A[i] = 4;
-  for (int64_t i = 0; i < elementsB; i++)
-    B[i] = 2;
-  for (int64_t i = 0; i < elementsC; i++)
-    C[i] = 0;
-
-  // print A
-  printf("A size: %ld\n", sizeA);
-
-  HANDLE_CUDA_ERROR(cudaMemcpy(A_d, A, sizeA, cudaMemcpyHostToDevice));
-  HANDLE_CUDA_ERROR(cudaMemcpy(B_d, B, sizeB, cudaMemcpyHostToDevice));
-  HANDLE_CUDA_ERROR(cudaMemcpy(C_d, C, sizeC, cudaMemcpyHostToDevice));
-
-  const uint32_t kAlignment = 128; // Alignment of the global-memory device pointers (bytes)
+  // Alignment of the global-memory device pointers (bytes)
+  const uint32_t kAlignment = 128;
   assert(uintptr_t(A_d) % kAlignment == 0);
   assert(uintptr_t(B_d) % kAlignment == 0);
   assert(uintptr_t(C_d) % kAlignment == 0);
 
-  /*************************
-   * cuTENSOR
-   *************************/
+  // Inicializa a matrix
+  for (int i = 0; i < MATRIX_HEIGTH * MATRIX_WIDTH; i++)
+  {
+    A[i] = 4.0f;
+    B[i] = 2.0f;
+    C[i] = 0.0f;
+  }
 
+  // Copia os dados para o dispositivo
+  HANDLE_CUDA_ERROR(cudaMemcpy(A_d, A, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH, cudaMemcpyHostToDevice));
+  HANDLE_CUDA_ERROR(cudaMemcpy(B_d, B, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH, cudaMemcpyHostToDevice));
+  HANDLE_CUDA_ERROR(cudaMemcpy(C_d, C, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH, cudaMemcpyHostToDevice));
+
+  // Define o handle cutensor
   cutensorHandle_t handle;
   HANDLE_ERROR(cutensorCreate(&handle));
 
-  /**********************
-   * Create Tensor Descriptors
-   **********************/
-
+  // Define os descriptors
   cutensorTensorDescriptor_t descA;
-  HANDLE_ERROR(cutensorCreateTensorDescriptor(handle,
-                                              &descA,
-                                              nmodeA,
-                                              extentA.data(),
-                                              NULL, /*stride*/
-                                              CUTENSOR_R_32F, kAlignment));
-
   cutensorTensorDescriptor_t descB;
-  HANDLE_ERROR(cutensorCreateTensorDescriptor(handle,
-                                              &descB,
-                                              nmodeB,
-                                              extentB.data(),
-                                              NULL, /*stride*/
-                                              CUTENSOR_R_32F, kAlignment));
-
   cutensorTensorDescriptor_t descC;
-  HANDLE_ERROR(cutensorCreateTensorDescriptor(handle,
-                                              &descC,
-                                              nmodeC,
-                                              extentC.data(),
-                                              NULL, /*stride*/
-                                              CUTENSOR_R_32F, kAlignment));
+  HANDLE_ERROR(cutensorCreateTensorDescriptor(handle, &descA, tamanhoEixoA, dimensoesEixoA.data(), NULL, CUTENSOR_R_32F, kAlignment));
+  HANDLE_ERROR(cutensorCreateTensorDescriptor(handle, &descB, tamanhoEixoB, dimensoesEixoB.data(), NULL, CUTENSOR_R_32F, kAlignment));
+  HANDLE_ERROR(cutensorCreateTensorDescriptor(handle, &descC, tamanhoEixoC, dimensoesEixoC.data(), NULL, CUTENSOR_R_32F, kAlignment));
 
-  /*******************************
-   * Create Contraction Descriptor
-   *******************************/
-  std::vector<int> modeC{'m', 'n'};
-  std::vector<int> modeA{'m', 'n'};
-  std::vector<int> modeB{'m', 'n'};
-
+  // Create Contraction Descriptor
   cutensorOperationDescriptor_t desc;
   const cutensorComputeDescriptor_t descCompute = CUTENSOR_COMPUTE_DESC_32F;
   HANDLE_ERROR(cutensorCreateContraction(handle,
                                          &desc,
-                                         descA, modeA.data(), /* unary operator A*/ CUTENSOR_OP_IDENTITY,
-                                         descB, modeB.data(), /* unary operator B*/ CUTENSOR_OP_IDENTITY,
-                                         descC, modeC.data(), /* unary operator C*/ CUTENSOR_OP_IDENTITY,
-                                         descC, modeC.data(),
+                                         descA, indicesEixoA.data(), /* unary operator A*/ CUTENSOR_OP_IDENTITY,
+                                         descB, indicesEixoB.data(), /* unary operator B*/ CUTENSOR_OP_IDENTITY,
+                                         descC, indicesEixoC.data(), /* unary operator C*/ CUTENSOR_OP_IDENTITY,
+                                         descC, indicesEixoC.data(),
                                          descCompute));
 
-  /*****************************
-   * Optional (but recommended): ensure that the scalar type is correct.
-   *****************************/
-
+  // Optional (but recommended): ensure that the scalar type is correct.
   cutensorDataType_t scalarType;
-  HANDLE_ERROR(cutensorOperationDescriptorGetAttribute(handle,
-                                                       desc,
-                                                       CUTENSOR_OPERATION_DESCRIPTOR_SCALAR_TYPE,
-                                                       (void *)&scalarType,
-                                                       sizeof(scalarType)));
+  HANDLE_ERROR(cutensorOperationDescriptorGetAttribute(handle, desc, CUTENSOR_OPERATION_DESCRIPTOR_SCALAR_TYPE, (void *)&scalarType, sizeof(scalarType)));
 
   assert(scalarType == CUTENSOR_R_32F);
   typedef float floatTypeCompute;
   floatTypeCompute alpha = (floatTypeCompute)1;
   floatTypeCompute beta = (floatTypeCompute)0;
 
-  /**************************
-   * Set the algorithm to use
-   ***************************/
-
+  // Set the algorithm to use
   const cutensorAlgo_t algo = CUTENSOR_ALGO_DEFAULT;
-
   cutensorPlanPreference_t planPref;
-  HANDLE_ERROR(cutensorCreatePlanPreference(
-      handle,
-      &planPref,
-      algo,
-      CUTENSOR_JIT_MODE_NONE));
+  HANDLE_ERROR(cutensorCreatePlanPreference(handle, &planPref, algo, CUTENSOR_JIT_MODE_NONE));
 
-  /**********************
-   * Query workspace estimate
-   **********************/
-
+  // Query workspace estimate
   uint64_t workspaceSizeEstimate = 0;
   const cutensorWorksizePreference_t workspacePref = CUTENSOR_WORKSPACE_DEFAULT;
-  HANDLE_ERROR(cutensorEstimateWorkspaceSize(handle,
-                                             desc,
-                                             planPref,
-                                             workspacePref,
-                                             &workspaceSizeEstimate));
+  HANDLE_ERROR(cutensorEstimateWorkspaceSize(handle, desc, planPref, workspacePref, &workspaceSizeEstimate));
 
-  /**************************
-   * Create Contraction Plan
-   **************************/
-
+  // Create Contraction Plan
   cutensorPlan_t plan;
-  HANDLE_ERROR(cutensorCreatePlan(handle,
-                                  &plan,
-                                  desc,
-                                  planPref,
-                                  workspaceSizeEstimate));
+  HANDLE_ERROR(cutensorCreatePlan(handle, &plan, desc, planPref, workspaceSizeEstimate));
 
-  /**************************
-   * Optional: Query information about the created plan
-   **************************/
-
-  // query actually used workspace
+  // Optional: query actually used workspace
   uint64_t actualWorkspaceSize = 0;
-  HANDLE_ERROR(cutensorPlanGetAttribute(handle,
-                                        plan,
-                                        CUTENSOR_PLAN_REQUIRED_WORKSPACE,
-                                        &actualWorkspaceSize,
-                                        sizeof(actualWorkspaceSize)));
-
-  // At this point the user knows exactly how much memory is need by the operation and
-  // only the smaller actual workspace needs to be allocated
+  HANDLE_ERROR(cutensorPlanGetAttribute(handle, plan, CUTENSOR_PLAN_REQUIRED_WORKSPACE, &actualWorkspaceSize, sizeof(actualWorkspaceSize)));
   assert(actualWorkspaceSize <= workspaceSizeEstimate);
 
+  // Define the workspace
   void *work = nullptr;
   if (actualWorkspaceSize > 0)
   {
@@ -294,43 +205,32 @@ int main()
     assert(uintptr_t(work) % 128 == 0); // workspace must be aligned to 128 byte-boundary
   }
 
-  /**********************
-   * Run
-   **********************/
-
+  // Execute
   cudaStream_t stream;
   HANDLE_CUDA_ERROR(cudaStreamCreate(&stream));
 
   begin = system_clock::now();
 
-  HANDLE_ERROR(cutensorContract(handle,
-                                plan,
-                                (void *)&alpha, A_d, B_d,
-                                (void *)&beta, C_d, C_d,
-                                work, actualWorkspaceSize, stream));
+  HANDLE_ERROR(cutensorContract(handle, plan, (void *)&alpha, A_d, B_d, (void *)&beta, C_d, C_d, work, actualWorkspaceSize, stream));
 
   end = system_clock::now();
   general_time = duration_cast<nanoseconds>(end.time_since_epoch() - begin.time_since_epoch()).count();
   std::cout << "CUTENSOR CORE - TOTAL TIME (ns): " << general_time << std::endl;
 
-  // // print the result in a aux variable
-  // floatTypeC *C_aux = (floatTypeC*) malloc(sizeof(floatTypeC) * elementsC);
+  // Print the result
+  float *C_aux = (float *)malloc(sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH);
+  HANDLE_CUDA_ERROR(cudaMemcpy(C_aux, C_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH, cudaMemcpyDeviceToHost));
 
-  // // Copy the result back to the host
-  // HANDLE_CUDA_ERROR(cudaMemcpy(C_aux, C_d, sizeC, cudaMemcpyDeviceToHost));
-
-  // // Print the result
+  // Print the result
   // std::cout << "Matrix C: " << std::endl;
-  // for (int i = 0; i < extentC[0]; i++)
+  // for (int i = 0; i < dimensoesEixoC[0]; i++)
   // {
-  //     for (int j = 0; j < extentC[1]; j++)
-  //     {
-  //         std::cout << C_aux[i * extentC[1] + j] << " ";
-  //     }
-  //     std::cout << std::endl;
+  //   for (int j = 0; j < dimensoesEixoC[1]; j++)
+  //   {
+  //     std::cout << C_aux[i * dimensoesEixoC[1] + j] << " ";
+  //   }
+  //   std::cout << std::endl;
   // }
-
-  /*************************/
 
   HANDLE_ERROR(cutensorDestroy(handle));
   HANDLE_ERROR(cutensorDestroyPlan(plan));

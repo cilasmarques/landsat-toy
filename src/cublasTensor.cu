@@ -8,31 +8,37 @@
 using namespace std::chrono;
 
 // Define the matrix size
-#define MATRIX_HEIGTH 32768
-#define MATRIX_WIDTH 32768
+#define MATRIX_HEIGTH 4
+#define MATRIX_WIDTH 4
 
-void cublasTensorExecution(cublasHandle_t cubaslHandle, float *d_matrixA, float *d_matrixB, float *d_matrixC)
+void cublasTensorExecution(cublasHandle_t cublasHandle, float *d_matrixA, float *d_matrixB, float *d_matrixC)
 {
-  // Perform matrix sum: C = A / B
+  //// Produto Escalar
   float alpha = 1.0f;
   float beta = 1.0f;
-  cublasStatus_t cublasStat = cublasSgeam(cubaslHandle, CUBLAS_OP_N, CUBLAS_OP_N, MATRIX_HEIGTH, MATRIX_WIDTH, &alpha, d_matrixA, MATRIX_HEIGTH, &beta, d_matrixB, MATRIX_HEIGTH, d_matrixC, MATRIX_HEIGTH);
+  cublasStatus_t cublasStat = cublasSgemm(cublasHandle,
+                                          CUBLAS_OP_N, CUBLAS_OP_N,
+                                          MATRIX_HEIGTH, MATRIX_WIDTH, MATRIX_WIDTH,
+                                          &alpha,
+                                          d_matrixA, MATRIX_HEIGTH,
+                                          d_matrixB, MATRIX_HEIGTH,
+                                          &beta,
+                                          d_matrixC, MATRIX_HEIGTH);
 }
 
 int main()
 {
   system_clock::time_point begin, end;
-  int64_t initial_time, final_time, general_time;
+  int64_t general_time;
 
   // Create a matrix
   float *matrixA = new float[MATRIX_HEIGTH * MATRIX_WIDTH];
   float *matrixB = new float[MATRIX_HEIGTH * MATRIX_WIDTH];
-  std::cout << "Matrix size: " << MATRIX_HEIGTH << " x " << MATRIX_WIDTH << std::endl;
 
   // Initialize the matrix
   for (int i = 0; i < MATRIX_HEIGTH * MATRIX_WIDTH; i++)
   {
-    matrixA[i] = 2.0f;
+    matrixA[i] = 4.0f;
     matrixB[i] = 2.0f;
   }
 
@@ -57,12 +63,10 @@ int main()
   cublasStat = cublasSetMathMode(cubaslHandle, CUBLAS_TENSOR_OP_MATH);
 
   begin = system_clock::now();
-  initial_time = duration_cast<nanoseconds>(system_clock::now().time_since_epoch()).count();
 
   cublasTensorExecution(cubaslHandle, d_matrixA, d_matrixB, d_matrixC);
 
   end = system_clock::now();
-  final_time = duration_cast<nanoseconds>(system_clock::now().time_since_epoch()).count();
   general_time = duration_cast<nanoseconds>(end.time_since_epoch() - begin.time_since_epoch()).count();
   std::cout << "CUBLAS CORE - TOTAL TIME (ns): " << general_time << std::endl;
   // ======== RUN CUBLAS TENSOR =========
