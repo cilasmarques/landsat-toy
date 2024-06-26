@@ -8,8 +8,8 @@
 using namespace std::chrono;
 
 // Define the matrix size
-#define MATRIX_HEIGTH 32768
-#define MATRIX_WIDTH 32768
+#define MATRIX_HEIGTH 10000
+#define MATRIX_WIDTH 10000
 
 __global__ void matrixMn(float *d_matrixA, float *d_matrixB, float *d_matrixC)
 {
@@ -20,13 +20,13 @@ __global__ void matrixMn(float *d_matrixA, float *d_matrixB, float *d_matrixC)
   if (row < MATRIX_HEIGTH && col < MATRIX_WIDTH)
   {
     unsigned int pos = row * MATRIX_WIDTH + col;
-    d_matrixC[pos] = d_matrixA[pos] / d_matrixB[pos];
+    d_matrixC[pos] = d_matrixA[pos] * d_matrixB[pos];
   }
 }
 
 void cudaCoreExecution(float *d_matrixA, float *d_matrixB, float *d_matrixC)
 {
-  // Perform matrix sum: C = A / B
+  // Perform matrix sum: C = A * B
   int num_threads = 1024;
   int num_blocks = ceil(MATRIX_HEIGTH * MATRIX_WIDTH / num_threads);
   matrixMn<<<num_blocks, num_threads>>>(d_matrixA, d_matrixB, d_matrixC);
@@ -46,7 +46,7 @@ int main()
   // Initialize the matrix
   for (int i = 0; i < MATRIX_HEIGTH * MATRIX_WIDTH; i++)
   {
-    matrixA[i] = 2.0f;
+    matrixA[i] = 4.0f;
     matrixB[i] = 2.0f;
   }
 
