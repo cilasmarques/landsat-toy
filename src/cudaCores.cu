@@ -8,8 +8,8 @@
 using namespace std::chrono;
 
 // Define the matrix size
-#define MATRIX_HEIGTH 4
-#define MATRIX_WIDTH 4
+#define MATRIX_HEIGTH 128*64
+#define MATRIX_WIDTH 128*64
 
 __global__ void matrixMn(float *d_matrixA, float *d_matrixB, float *d_matrixC)
 {
@@ -20,21 +20,21 @@ __global__ void matrixMn(float *d_matrixA, float *d_matrixB, float *d_matrixC)
   if (row < MATRIX_HEIGTH && col < MATRIX_WIDTH)
   {
     //// Produto Escalar
-    // for (int i = 0; i < MATRIX_WIDTH; i++)
-    // {
-    //   d_matrixC[row * MATRIX_WIDTH + col] += d_matrixA[row * MATRIX_WIDTH + i] * d_matrixB[i * MATRIX_WIDTH + col];
-    // }
+    for (int i = 0; i < MATRIX_WIDTH; i++)
+    {
+      d_matrixC[row * MATRIX_WIDTH + col] += d_matrixA[row * MATRIX_WIDTH + i] * d_matrixB[i * MATRIX_WIDTH + col];
+    }
 
     ///// Produto de hadamard
-    unsigned int pos = row * MATRIX_WIDTH + col;
-    d_matrixC[pos] = d_matrixA[pos] * d_matrixB[pos];
+    // unsigned int pos = row * MATRIX_WIDTH + col;
+    // d_matrixC[pos] = d_matrixA[pos] * d_matrixB[pos];
   }
 }
 
 void cudaCoreExecution(float *d_matrixA, float *d_matrixB, float *d_matrixC)
 {
   // Perform matrix sum: C = A * B
-  int num_threads = 4;
+  int num_threads = 1024;
   int num_blocks = ceil(MATRIX_HEIGTH * MATRIX_WIDTH / num_threads);
   matrixMn<<<num_blocks, num_threads>>>(d_matrixA, d_matrixB, d_matrixC);
 }
@@ -75,7 +75,7 @@ int main()
 
   end = system_clock::now();
   general_time = duration_cast<nanoseconds>(end.time_since_epoch() - begin.time_since_epoch()).count();
-  std::cout << "CUDA CORE - TOTAL TIME (ns): " << general_time << std::endl;
+  std::cout << "CUDA CORE," << MATRIX_HEIGTH << " x " << MATRIX_WIDTH << ", " << general_time << std::endl;
   // ======== RUN CUDA CORE =========
 
   // Copy the result back to the host

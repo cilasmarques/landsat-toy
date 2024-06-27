@@ -1,14 +1,14 @@
 build-nvcc:
-	nvcc -g ./src/*.cu -o ./main -lcublas -lcutensor
+	/usr/local/cuda/bin/nvcc -g ./src/*.cu -o ./main -lcublas -lcutensor
 
 build-cuda-core:
-	nvcc -g ./src/cudaCores.cu -o ./main 
+	/usr/local/cuda/bin/nvcc -g ./src/cudaCores.cu -o ./main1
 
 build-cuda-tensor:
-	nvcc -g ./src/cudaTensor.cu -o ./main -lcutensor -lcublas 
+	/usr/local/cuda/bin/nvcc -g ./src/cudaTensor.cu -o ./main2 -lcutensor -lcublas 
 
 build-cublas:
-	nvcc -g ./src/cublasTensor.cu -o ./main -lcutensor  -lcublas 
+	/usr/local/cuda/bin/nvcc -g ./src/cublasTensor.cu -o ./main3 -lcutensor  -lcublas 
 
 execute:
 	./main

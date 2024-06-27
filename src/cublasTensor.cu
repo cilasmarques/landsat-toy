@@ -8,8 +8,8 @@
 using namespace std::chrono;
 
 // Define the matrix size
-#define MATRIX_HEIGTH 4
-#define MATRIX_WIDTH 4
+#define MATRIX_HEIGTH 128*64
+#define MATRIX_WIDTH 128*64
 
 void cublasTensorExecution(cublasHandle_t cublasHandle, float *d_matrixA, float *d_matrixB, float *d_matrixC)
 {
@@ -68,7 +68,7 @@ int main()
 
   end = system_clock::now();
   general_time = duration_cast<nanoseconds>(end.time_since_epoch() - begin.time_since_epoch()).count();
-  std::cout << "CUBLAS CORE - TOTAL TIME (ns): " << general_time << std::endl;
+  std::cout << "CUBLAS," << MATRIX_HEIGTH << " x " << MATRIX_WIDTH << ", " << general_time << std::endl;
   // ======== RUN CUBLAS TENSOR =========
 
   // Copy the result back to the host

@@ -41,8 +41,8 @@
 
 using namespace std::chrono;
 
-#define MATRIX_HEIGTH 4
-#define MATRIX_WIDTH 4
+#define MATRIX_HEIGTH 128*64
+#define MATRIX_WIDTH 128*64
 
 #define HANDLE_ERROR(x)                                   \
   {                                                       \
@@ -215,7 +215,7 @@ int main()
 
   end = system_clock::now();
   general_time = duration_cast<nanoseconds>(end.time_since_epoch() - begin.time_since_epoch()).count();
-  std::cout << "CUTENSOR CORE - TOTAL TIME (ns): " << general_time << std::endl;
+  std::cout << "CUTENSOR," << MATRIX_HEIGTH << " x " << MATRIX_WIDTH << ", " << general_time << std::endl;
 
   // Print the result
   float *C_aux = (float *)malloc(sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH);
