@@ -1,5 +1,5 @@
 build-serial:
-	/usr/local/cuda/bin/nvcc -g ./src/serial.cu -o ./serial -ltiff -std=c++14
+	/usr/local/cuda/bin/nvcc -g ./src/*.cu -o ./main -ltiff -std=c++14
 
 build-cuda-core:
 	/usr/local/cuda/bin/nvcc -g ./src/cudaCores.cu -o ./cudaCores -ltiff -std=c++14
