@@ -15,8 +15,8 @@
 using namespace std::chrono;
 
 // Define the matrix size
-#define MATRIX_HEIGTH 6502
-#define MATRIX_WIDTH 6502 // 7295
+#define MATRIX_HEIGTH 35
+#define MATRIX_WIDTH 35 // 7295
 
 float *all1 = new float[MATRIX_HEIGTH * MATRIX_WIDTH];
 
@@ -65,6 +65,7 @@ float *reflectance6 = new float[MATRIX_HEIGTH * MATRIX_WIDTH];
 float *reflectance7 = new float[MATRIX_HEIGTH * MATRIX_WIDTH];
 float *reflectance8 = new float[MATRIX_HEIGTH * MATRIX_WIDTH];
 
+// ====== AUX FUNCTIONS ======
 struct cutensorStruct
 {
   cutensorPlan_t plan;
@@ -108,6 +109,34 @@ cutensorStruct createPlanWork(cutensorHandle_t handle, cutensorOperationDescript
 
   return {plan, work, actualWorkspaceSize};
 }
+
+__global__ void rad_kernel(float *band1_d, float *band2_d, float *band3_d, float *band4_d, float *band5_d, float *band6_d, float *band7_d, float *band8_d,
+                           float *brescale1_d, float *brescale2_d, float *brescale3_d, float *brescale4_d, float *brescale5_d, float *brescale6_d, float *brescale7_d, float *brescale8_d,
+                           float *grenscale1_d, float *grenscale2_d, float *grenscale3_d, float *grenscale4_d, float *grenscale5_d, float *grenscale6_d, float *grenscale7_d, float *grenscale8_d,
+                           float *radiance1_d, float *radiance2_d, float *radiance3_d, float *radiance4_d, float *radiance5_d, float *radiance6_d, float *radiance7_d, float *radiance8_d)
+{
+  unsigned int idx = threadIdx.x + blockIdx.x * blockDim.x;
+
+  // Map 1D position to 2D grid
+  unsigned int row = idx / MATRIX_WIDTH;
+  unsigned int col = idx % MATRIX_WIDTH;
+
+  if (col < MATRIX_WIDTH && row < MATRIX_HEIGTH)
+  {
+    unsigned int pos = row * MATRIX_WIDTH + col;
+
+    radiance1_d[pos] = band1_d[pos] * grenscale1_d[pos] + brescale1_d[pos];
+    radiance2_d[pos] = band2_d[pos] * grenscale2_d[pos] + brescale2_d[pos];
+    radiance3_d[pos] = band3_d[pos] * grenscale3_d[pos] + brescale3_d[pos];
+    radiance4_d[pos] = band4_d[pos] * grenscale4_d[pos] + brescale4_d[pos];
+    radiance5_d[pos] = band5_d[pos] * grenscale5_d[pos] + brescale5_d[pos];
+    radiance6_d[pos] = band6_d[pos] * grenscale6_d[pos] + brescale6_d[pos];
+    radiance7_d[pos] = band7_d[pos] * grenscale7_d[pos] + brescale7_d[pos];
+    radiance8_d[pos] = band8_d[pos] * grenscale8_d[pos] + brescale8_d[pos];
+  }
+}
+
+// ====== MAIN FUNCTIONS ======
 
 void serial(Sensor sensor, MTL mtl)
 {
@@ -163,10 +192,10 @@ void cutensor(Sensor sensor, MTL mtl)
   system_clock::time_point begin, end;
 
   // Aloca memória
-  void *band1_d, *band2_d, *band3_d, *band4_d, *band5_d, *band6_d, *band7_d, *band8_d;
-  void *brescale1_d, *brescale2_d, *brescale3_d, *brescale4_d, *brescale5_d, *brescale6_d, *brescale7_d, *brescale8_d;
-  void *grenscale1_d, *grenscale2_d, *grenscale3_d, *grenscale4_d, *grenscale5_d, *grenscale6_d, *grenscale7_d, *grenscale8_d;
-  void *radiance1_d, *radiance2_d, *radiance3_d, *radiance4_d, *radiance5_d, *radiance6_d, *radiance7_d, *radiance8_d;
+  float *band1_d, *band2_d, *band3_d, *band4_d, *band5_d, *band6_d, *band7_d, *band8_d;
+  float *brescale1_d, *brescale2_d, *brescale3_d, *brescale4_d, *brescale5_d, *brescale6_d, *brescale7_d, *brescale8_d;
+  float *grenscale1_d, *grenscale2_d, *grenscale3_d, *grenscale4_d, *grenscale5_d, *grenscale6_d, *grenscale7_d, *grenscale8_d;
+  float *radiance1_d, *radiance2_d, *radiance3_d, *radiance4_d, *radiance5_d, *radiance6_d, *radiance7_d, *radiance8_d;
 
   HANDLE_CUDA_ERROR(cudaMalloc((void **)&band1_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH));
   HANDLE_CUDA_ERROR(cudaMalloc((void **)&band2_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH));
@@ -298,7 +327,8 @@ void cutensor(Sensor sensor, MTL mtl)
 
   // ====== RUN RADIANCE ======
   // radiance_vector = 1 * bands_resampled * sensor.parameters[sensor.GRENSCALE] + 1 * sensor.parameters[sensor.BRESCALE]
-  alpha = 1; beta = 1;
+  alpha = 1;
+  beta = 1;
   begin = system_clock::now();
 
   HANDLE_ERROR(cutensorContract(handle, planContraction.plan, (void *)&alpha, band1_d, grenscale1_d, (void *)&beta, brescale1_d, radiance1_d, planContraction.work, planContraction.actualWorkspaceSize, stream));
@@ -441,24 +471,143 @@ void cutensor(Sensor sensor, MTL mtl)
   HANDLE_CUDA_ERROR(cudaStreamDestroy(stream));
 }
 
+void cudaCore(Sensor sensor, MTL mtl)
+{
+  int64_t general_time;
+  system_clock::time_point begin, end;
+
+  float *band1_d, *band2_d, *band3_d, *band4_d, *band5_d, *band6_d, *band7_d, *band8_d;
+  float *brescale1_d, *brescale2_d, *brescale3_d, *brescale4_d, *brescale5_d, *brescale6_d, *brescale7_d, *brescale8_d;
+  float *grenscale1_d, *grenscale2_d, *grenscale3_d, *grenscale4_d, *grenscale5_d, *grenscale6_d, *grenscale7_d, *grenscale8_d;
+  float *radiance1_d, *radiance2_d, *radiance3_d, *radiance4_d, *radiance5_d, *radiance6_d, *radiance7_d, *radiance8_d;
+
+  HANDLE_CUDA_ERROR(cudaMalloc((void **)&band1_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH));
+  HANDLE_CUDA_ERROR(cudaMalloc((void **)&band2_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH));
+  HANDLE_CUDA_ERROR(cudaMalloc((void **)&band3_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH));
+  HANDLE_CUDA_ERROR(cudaMalloc((void **)&band4_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH));
+  HANDLE_CUDA_ERROR(cudaMalloc((void **)&band5_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH));
+  HANDLE_CUDA_ERROR(cudaMalloc((void **)&band6_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH));
+  HANDLE_CUDA_ERROR(cudaMalloc((void **)&band7_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH));
+  HANDLE_CUDA_ERROR(cudaMalloc((void **)&band8_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH));
+  std::cout << "Alocou 1" << std::endl;
+
+  HANDLE_CUDA_ERROR(cudaMalloc((void **)&brescale1_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH));
+  HANDLE_CUDA_ERROR(cudaMalloc((void **)&brescale2_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH));
+  HANDLE_CUDA_ERROR(cudaMalloc((void **)&brescale3_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH));
+  HANDLE_CUDA_ERROR(cudaMalloc((void **)&brescale4_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH));
+  HANDLE_CUDA_ERROR(cudaMalloc((void **)&brescale5_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH));
+  HANDLE_CUDA_ERROR(cudaMalloc((void **)&brescale6_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH));
+  HANDLE_CUDA_ERROR(cudaMalloc((void **)&brescale7_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH));
+  HANDLE_CUDA_ERROR(cudaMalloc((void **)&brescale8_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH));
+  std::cout << "Alocou 2" << std::endl;
+
+  HANDLE_CUDA_ERROR(cudaMalloc((void **)&grenscale1_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH));
+  HANDLE_CUDA_ERROR(cudaMalloc((void **)&grenscale2_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH));
+  HANDLE_CUDA_ERROR(cudaMalloc((void **)&grenscale3_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH));
+  HANDLE_CUDA_ERROR(cudaMalloc((void **)&grenscale4_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH));
+  HANDLE_CUDA_ERROR(cudaMalloc((void **)&grenscale5_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH));
+  HANDLE_CUDA_ERROR(cudaMalloc((void **)&grenscale6_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH));
+  HANDLE_CUDA_ERROR(cudaMalloc((void **)&grenscale7_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH));
+  HANDLE_CUDA_ERROR(cudaMalloc((void **)&grenscale8_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH));
+  std::cout << "Alocou 3" << std::endl;
+
+  HANDLE_CUDA_ERROR(cudaMalloc((void **)&radiance1_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH));
+  HANDLE_CUDA_ERROR(cudaMalloc((void **)&radiance2_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH));
+  HANDLE_CUDA_ERROR(cudaMalloc((void **)&radiance3_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH));
+  HANDLE_CUDA_ERROR(cudaMalloc((void **)&radiance4_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH));
+  HANDLE_CUDA_ERROR(cudaMalloc((void **)&radiance5_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH));
+  HANDLE_CUDA_ERROR(cudaMalloc((void **)&radiance6_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH));
+  HANDLE_CUDA_ERROR(cudaMalloc((void **)&radiance7_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH));
+  HANDLE_CUDA_ERROR(cudaMalloc((void **)&radiance8_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH));
+  std::cout << "Alocou 4" << std::endl;
+
+  // Copia os dados para o dispositivo
+  HANDLE_CUDA_ERROR(cudaMemcpy(band1_d, band1, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH, cudaMemcpyHostToDevice));
+  HANDLE_CUDA_ERROR(cudaMemcpy(band2_d, band2, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH, cudaMemcpyHostToDevice));
+  HANDLE_CUDA_ERROR(cudaMemcpy(band3_d, band3, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH, cudaMemcpyHostToDevice));
+  HANDLE_CUDA_ERROR(cudaMemcpy(band4_d, band4, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH, cudaMemcpyHostToDevice));
+  HANDLE_CUDA_ERROR(cudaMemcpy(band5_d, band5, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH, cudaMemcpyHostToDevice));
+  HANDLE_CUDA_ERROR(cudaMemcpy(band6_d, band6, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH, cudaMemcpyHostToDevice));
+  HANDLE_CUDA_ERROR(cudaMemcpy(band7_d, band7, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH, cudaMemcpyHostToDevice));
+  HANDLE_CUDA_ERROR(cudaMemcpy(band8_d, band8, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH, cudaMemcpyHostToDevice));
+  std::cout << "Copiou 1" << std::endl;
+
+  HANDLE_CUDA_ERROR(cudaMemcpy(grenscale1_d, grenscale1, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH, cudaMemcpyHostToDevice));
+  HANDLE_CUDA_ERROR(cudaMemcpy(grenscale2_d, grenscale2, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH, cudaMemcpyHostToDevice));
+  HANDLE_CUDA_ERROR(cudaMemcpy(grenscale3_d, grenscale3, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH, cudaMemcpyHostToDevice));
+  HANDLE_CUDA_ERROR(cudaMemcpy(grenscale4_d, grenscale4, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH, cudaMemcpyHostToDevice));
+  HANDLE_CUDA_ERROR(cudaMemcpy(grenscale5_d, grenscale5, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH, cudaMemcpyHostToDevice));
+  HANDLE_CUDA_ERROR(cudaMemcpy(grenscale6_d, grenscale6, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH, cudaMemcpyHostToDevice));
+  HANDLE_CUDA_ERROR(cudaMemcpy(grenscale7_d, grenscale7, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH, cudaMemcpyHostToDevice));
+  HANDLE_CUDA_ERROR(cudaMemcpy(grenscale8_d, grenscale8, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH, cudaMemcpyHostToDevice));
+  std::cout << "Copiou 2" << std::endl;
+
+  HANDLE_CUDA_ERROR(cudaMemcpy(brescale1_d, brescale1, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH, cudaMemcpyHostToDevice));
+  HANDLE_CUDA_ERROR(cudaMemcpy(brescale2_d, brescale2, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH, cudaMemcpyHostToDevice));
+  HANDLE_CUDA_ERROR(cudaMemcpy(brescale3_d, brescale3, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH, cudaMemcpyHostToDevice));
+  HANDLE_CUDA_ERROR(cudaMemcpy(brescale4_d, brescale4, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH, cudaMemcpyHostToDevice));
+  HANDLE_CUDA_ERROR(cudaMemcpy(brescale5_d, brescale5, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH, cudaMemcpyHostToDevice));
+  HANDLE_CUDA_ERROR(cudaMemcpy(brescale6_d, brescale6, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH, cudaMemcpyHostToDevice));
+  HANDLE_CUDA_ERROR(cudaMemcpy(brescale7_d, brescale7, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH, cudaMemcpyHostToDevice));
+  HANDLE_CUDA_ERROR(cudaMemcpy(brescale8_d, brescale8, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH, cudaMemcpyHostToDevice));
+  std::cout << "Copiou 3" << std::endl;
+
+  HANDLE_CUDA_ERROR(cudaMemcpy(radiance1_d, radiance1, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH, cudaMemcpyHostToDevice));
+  HANDLE_CUDA_ERROR(cudaMemcpy(radiance2_d, radiance2, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH, cudaMemcpyHostToDevice));
+  HANDLE_CUDA_ERROR(cudaMemcpy(radiance3_d, radiance3, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH, cudaMemcpyHostToDevice));
+  HANDLE_CUDA_ERROR(cudaMemcpy(radiance4_d, radiance4, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH, cudaMemcpyHostToDevice));
+  HANDLE_CUDA_ERROR(cudaMemcpy(radiance5_d, radiance5, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH, cudaMemcpyHostToDevice));
+  HANDLE_CUDA_ERROR(cudaMemcpy(radiance6_d, radiance6, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH, cudaMemcpyHostToDevice));
+  HANDLE_CUDA_ERROR(cudaMemcpy(radiance7_d, radiance7, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH, cudaMemcpyHostToDevice));
+  HANDLE_CUDA_ERROR(cudaMemcpy(radiance8_d, radiance8, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH, cudaMemcpyHostToDevice));
+  std::cout << "Copiou 4" << std::endl;
+
+  // ====== RUN RADIANCE ======
+  int num_threads = 35;
+  int num_blocks = (MATRIX_HEIGTH * MATRIX_WIDTH + num_threads - 1) / num_threads;
+
+  begin = system_clock::now();
+
+  rad_kernel<<<num_blocks, num_threads>>>(band1_d, band2_d, band3_d, band4_d, band5_d, band6_d, band7_d, band8_d,
+                                          brescale1_d, brescale2_d, brescale3_d, brescale4_d, brescale5_d, brescale6_d, brescale7_d, brescale8_d,
+                                          grenscale1_d, grenscale2_d, grenscale3_d, grenscale4_d, grenscale5_d, grenscale6_d, grenscale7_d, grenscale8_d,
+                                          radiance1_d, radiance2_d, radiance3_d, radiance4_d, radiance5_d, radiance6_d, radiance7_d, radiance8_d);
+
+  end = system_clock::now();
+  general_time = duration_cast<nanoseconds>(end.time_since_epoch() - begin.time_since_epoch()).count();
+  std::cout << "CUDACORE," << MATRIX_HEIGTH << " x " << MATRIX_WIDTH << ", " << general_time << std::endl;
+  // ====== RUN RADIANCE ======
+
+  // Copy data back to host
+  HANDLE_CUDA_ERROR(cudaMemcpy(radiance1, radiance1_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH, cudaMemcpyDeviceToHost));
+  HANDLE_CUDA_ERROR(cudaMemcpy(radiance2, radiance2_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH, cudaMemcpyDeviceToHost));
+  HANDLE_CUDA_ERROR(cudaMemcpy(radiance3, radiance3_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH, cudaMemcpyDeviceToHost));
+  HANDLE_CUDA_ERROR(cudaMemcpy(radiance4, radiance4_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH, cudaMemcpyDeviceToHost));
+  HANDLE_CUDA_ERROR(cudaMemcpy(radiance5, radiance5_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH, cudaMemcpyDeviceToHost));
+  HANDLE_CUDA_ERROR(cudaMemcpy(radiance6, radiance6_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH, cudaMemcpyDeviceToHost));
+  HANDLE_CUDA_ERROR(cudaMemcpy(radiance7, radiance7_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH, cudaMemcpyDeviceToHost));
+  HANDLE_CUDA_ERROR(cudaMemcpy(radiance8, radiance8_d, sizeof(float) * MATRIX_HEIGTH * MATRIX_WIDTH, cudaMemcpyDeviceToHost));
+
+}
+
 int main()
 {
   TIFF *bands_resampled[8];
 
   // Sensor setup
-  MTL mtl = MTL("./input/final_results/MTL.txt");
+  MTL mtl = MTL("./input/small/MTL.txt");
   Sensor sensor = Sensor(mtl.number_sensor, mtl.year);
 
   // TIFFs Setup
   std::string bands_paths[] = {
-      "./input/final_results/B2.TIF",
-      "./input/final_results/B3.TIF",
-      "./input/final_results/B4.TIF",
-      "./input/final_results/B5.TIF",
-      "./input/final_results/B6.TIF",
-      "./input/final_results/B10.TIF",
-      "./input/final_results/B7.TIF",
-      "./input/final_results/elevation.tif"};
+      "./input/small/B2.TIF",
+      "./input/small/B3.TIF",
+      "./input/small/B4.TIF",
+      "./input/small/B5.TIF",
+      "./input/small/B6.TIF",
+      "./input/small/B10.TIF",
+      "./input/small/B7.TIF",
+      "./input/small/elevation.tif"};
 
   for (int i = 0; i < 8; i++)
   {
@@ -544,19 +693,20 @@ int main()
   }
 
   // ======== RUN =========
-  // serial(sensor, mtl);
-  cutensor(sensor, mtl);
+  serial(sensor, mtl);
+  // cutensor(sensor, mtl);
+  // cudaCore(sensor, mtl);
   // ======== RUN =========
 
   // Print reflectance1
-  // for (int i = 0; i < width; i++)
-  // {
-  //   for (int j = 0; j < height; j++)
-  //   {
-  //     std::cout << reflectance1[j * width + i] << " ";
-  //   }
-  //   std::cout << std::endl;
-  // }
+  for (int i = 0; i < width; i++)
+  {
+    for (int j = 0; j < height; j++)
+    {
+      std::cout << radiance1[j * width + i] << " ";
+    }
+    std::cout << std::endl;
+  }
 
   for (int i = 0; i < 8; i++)
   {
